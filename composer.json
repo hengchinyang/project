@@ -1,0 +1,15 @@
+{
+    "name": "university/medicare-connect",
+    "description": "MediCare Connect university assignment",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.2",
+        "illuminate/database": "^12.0",
+        "illuminate/events": "^12.0"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}

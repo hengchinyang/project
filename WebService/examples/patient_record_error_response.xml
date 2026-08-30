@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<patientRecordResponse>
+    <requestID>REQ-20260823-005</requestID>
+    <status>E</status>
+    <timeStamp>2026-08-23 10:50:01</timeStamp>
+    <message>Request XML does not match the Patient Record IFA.</message>
+</patientRecordResponse>

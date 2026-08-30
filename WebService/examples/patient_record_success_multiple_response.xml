@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<patientRecordResponse>
+    <requestID>REQ-20260823-003</requestID>
+    <status>S</status>
+    <timeStamp>2026-08-23 10:40:01</timeStamp>
+    <message>Patient Record summary retrieved successfully.</message>
+    <patient>
+        <patientID>PA001</patientID>
+        <patientName>John Tan</patientName>
+    </patient>
+    <records>
+        <record>
+            <recordID>PR001</recordID>
+            <appointmentID>APT0001</appointmentID>
+            <doctorID>DC001</doctorID>
+            <condition>Asthma</condition>
+            <severity>Moderate</severity>
+            <recordDate>2026-08-01</recordDate>
+        </record>
+        <record>
+            <recordID>PR002</recordID>
+            <appointmentID>APT0002</appointmentID>
+            <doctorID>DC001</doctorID>
+            <condition>Headache</condition>
+            <severity>Mild</severity>
+            <recordDate>2026-08-05</recordDate>
+        </record>
+    </records>
+</patientRecordResponse>

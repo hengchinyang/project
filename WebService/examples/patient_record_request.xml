@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<patientRecordRequest>
+    <requestID>REQ-20260822-001</requestID>
+    <timeStamp>2026-08-22 10:30:00</timeStamp>
+    <patientID>PA001</patientID>
+</patientRecordRequest>

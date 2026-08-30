@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pharmacyPrescriptionResponse>
+    <requestID>REQ-20260824-001</requestID>
+    <status>S</status>
+    <timeStamp>2026-08-24 10:30:01</timeStamp>
+    <message>Prescription retrieved successfully.</message>
+    <patientID>PA001</patientID>
+    <appointmentID>APT0001</appointmentID>
+    <prescriptionID>RX0001</prescriptionID>
+    <doctorID>DC001</doctorID>
+    <finalPrice>25.50</finalPrice>
+    <medicines>
+        <medicine>
+            <medicineID>MED001</medicineID>
+            <medicineName>Salbutamol Inhaler</medicineName>
+            <quantity>1</quantity>
+            <totalPrice>25.50</totalPrice>
+        </medicine>
+    </medicines>
+</pharmacyPrescriptionResponse>
