@@ -1,8 +1,8 @@
-CREATE DATABASE IF NOT EXISTS medicare_connect
+CREATE DATABASE IF NOT EXISTS medicare_connect2
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_general_ci;
 
-USE medicare_connect;
+USE medicare_connect2;
 
 CREATE TABLE IF NOT EXISTS patients (
     id VARCHAR(10) NOT NULL,
@@ -21,7 +21,6 @@ CREATE TABLE IF NOT EXISTS patient_records (
     id VARCHAR(10) NOT NULL,
     patient_id VARCHAR(10) NOT NULL,
     condition_id VARCHAR(10) NOT NULL,
-    appointment_id VARCHAR(20) NOT NULL,
     doctor_id VARCHAR(20) NOT NULL,
     severity VARCHAR(20) NOT NULL,
     remark TEXT NOT NULL,
@@ -33,6 +32,20 @@ CREATE TABLE IF NOT EXISTS patient_records (
         FOREIGN KEY (patient_id) REFERENCES patients (id),
     CONSTRAINT fk_patient_record_condition
         FOREIGN KEY (condition_id) REFERENCES conditions (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Pharmacy owns prescription details. This module stores only the external
+-- prescription reference linked to a Patient Record.
+CREATE TABLE IF NOT EXISTS patient_record_prescriptions (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    patient_record_id VARCHAR(10) NOT NULL,
+    prescription_reference VARCHAR(50) NOT NULL,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_patient_record_prescription (patient_record_id, prescription_reference),
+    INDEX idx_prescription_reference (prescription_reference),
+    CONSTRAINT fk_record_prescription_record
+        FOREIGN KEY (patient_record_id) REFERENCES patient_records (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE IF NOT EXISTS patient_record_access_logs (
@@ -49,5 +62,5 @@ CREATE TABLE IF NOT EXISTS patient_record_access_logs (
         FOREIGN KEY (patient_record_id) REFERENCES patient_records (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- appointment_id and doctor_id intentionally have no foreign keys until the
--- teammate-owned Appointment and Doctor/User schemas are finalised.
+-- doctor_id intentionally has no foreign key until the teammate-owned
+-- Doctor/User schema is finalised.

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+date_default_timezone_set('Asia/Kuala_Lumpur');
+
 /**
  * Local smoke tests for the Patient Record XML service.
  * Run with: C:\xampp\php\php.exe tests\xml_service_smoke.php
@@ -11,6 +13,11 @@ $endpoint = 'http://127.0.0.1/project/api/patient-record-summary.php';
 $keyPath = 'C:/xampp/medicare-connect-secrets/patient-record-service.key';
 $apiKey = trim((string) file_get_contents($keyPath));
 $validRequest = (string) file_get_contents(__DIR__ . '/../WebService/examples/patient_record_request.xml');
+$validRequest = preg_replace(
+    '/<timeStamp>[^<]+<\/timeStamp>/',
+    '<timeStamp>' . date('Y-m-d H:i:s') . '</timeStamp>',
+    $validRequest
+) ?: $validRequest;
 
 function callService(string $endpoint, string $body, ?string $apiKey, string $method = 'POST'): array
 {
@@ -59,6 +66,14 @@ assertService($code === 401, 'missing API key returns HTTP 401');
 
 [$code] = callService($endpoint, '', $apiKey, 'GET');
 assertService($code === 405, 'unsupported method returns HTTP 405');
+
+$staleRequest = preg_replace(
+    '/<timeStamp>[^<]+<\/timeStamp>/',
+    '<timeStamp>2000-01-01 00:00:00</timeStamp>',
+    $validRequest
+) ?: $validRequest;
+[$code, $body] = callService($endpoint, $staleRequest, $apiKey);
+assertService($code === 400 && str_contains($body, '<status>E</status>'), 'stale timestamp is rejected');
 
 $missingRequest = str_replace('<patientID>PA001</patientID>', '<patientID>PA999</patientID>', $validRequest);
 [$code, $body] = callService($endpoint, $missingRequest, $apiKey);

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<pharmacyPrescriptionRequest>
-    <requestID>REQ-20260824-001</requestID>
-    <timeStamp>2026-08-24 10:30:00</timeStamp>
-    <patientID>PA001</patientID>
-    <appointmentID>APT0001</appointmentID>
-</pharmacyPrescriptionRequest>
+<m:getPrescription xmlns:m="urn:medicare:patient-record">
+  <m:requestID>REQ-DEMO-001</m:requestID>
+  <m:timestamp>2026-08-31 19:00:00</m:timestamp>
+  <m:prescriptionReference>RX-DEMO-001</m:prescriptionReference>
+</m:getPrescription>

@@ -7,6 +7,7 @@ require_once __DIR__ . '/../Model/PatientRecord.php';
 final class PatientRecordXmlService
 {
     private const MAX_REQUEST_BYTES = 65536;
+    private const MAX_CLOCK_DIFFERENCE_SECONDS = 300;
 
     public function __construct(private readonly PatientRecord $patientRecordModel)
     {
@@ -40,21 +41,18 @@ final class PatientRecordXmlService
         $requestId = $this->elementValue($document, 'requestID');
         $timeStamp = $this->elementValue($document, 'timeStamp');
         $patientId = $this->elementValue($document, 'patientID');
-        $appointmentId = $this->elementValue($document, 'appointmentID', false);
 
-        $requestDate = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $timeStamp);
+        $timeZone = new DateTimeZone('Asia/Kuala_Lumpur');
+        $requestDate = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $timeStamp, $timeZone);
         if ($requestDate === false || $requestDate->format('Y-m-d H:i:s') !== $timeStamp) {
             return $this->result(400, $requestId, 'E', 'Invalid request timestamp.');
         }
-
-        $records = $this->patientRecordModel->getAllByPatient($patientId);
-        if ($appointmentId !== '') {
-            $records = array_values(array_filter(
-                $records,
-                static fn (array $record): bool => $record['appointment_id'] === $appointmentId
-            ));
+        $clockDifference = abs((new DateTimeImmutable('now', $timeZone))->getTimestamp() - $requestDate->getTimestamp());
+        if ($clockDifference > self::MAX_CLOCK_DIFFERENCE_SECONDS) {
+            return $this->result(400, $requestId, 'E', 'Request timestamp is outside the allowed five-minute window.');
         }
 
+        $records = $this->patientRecordModel->getAllByPatient($patientId);
         if ($records === []) {
             return $this->result(404, $requestId, 'F', 'No Patient Record was found.');
         }
@@ -104,7 +102,6 @@ final class PatientRecordXmlService
             foreach ($records as $record) {
                 $recordNode = $recordsNode->appendChild($document->createElement('record'));
                 $this->appendText($document, $recordNode, 'recordID', $record['id']);
-                $this->appendText($document, $recordNode, 'appointmentID', $record['appointment_id']);
                 $this->appendText($document, $recordNode, 'doctorID', $record['doctor_id']);
                 $this->appendText($document, $recordNode, 'condition', $record['condition_name']);
                 $this->appendText($document, $recordNode, 'severity', $record['severity']);

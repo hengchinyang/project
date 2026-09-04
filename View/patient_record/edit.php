@@ -42,10 +42,13 @@
 
     </style>
 
+    <link rel="icon" href="assets/favicon.ico">
+    <link rel="stylesheet" href="assets/css/pharmacy.css">
 </head>
 
 
 <body>
+<main class="container">
 
 
 <h1>Edit Patient Record</h1>
@@ -73,27 +76,15 @@
     action="index.php?action=update&id=<?= urlencode($record['id']) ?>"
     method="POST"
 >
+    <?= Csrf::input() ?>
 
 
-    <label for="appointment_id">Appointment ID</label>
-    <input
-        id="appointment_id"
-        name="appointment_id"
-        maxlength="20"
-        pattern="APT[0-9]{4,17}"
-        value="<?= htmlspecialchars($record['appointment_id']) ?>"
-        required
-    >
-
-    <label for="doctor_id">Doctor ID</label>
-    <input
-        id="doctor_id"
-        name="doctor_id"
-        maxlength="20"
-        pattern="DC[0-9]{3,18}"
-        value="<?= htmlspecialchars($record['doctor_id']) ?>"
-        required
-    >
+    <?php if ($isDoctorUser): ?>
+        <p><strong>Doctor ID:</strong> <?= htmlspecialchars($record['doctor_id']) ?> (assigned automatically)</p>
+    <?php else: ?>
+        <label for="doctor_id">Doctor ID</label>
+        <input id="doctor_id" name="doctor_id" maxlength="20" pattern="DC[0-9]{3,18}" value="<?= htmlspecialchars($record['doctor_id']) ?>" required>
+    <?php endif; ?>
 
     <label for="condition_id">
         Condition
@@ -206,5 +197,6 @@
 </p>
 
 
+</main>
 </body>
 </html>

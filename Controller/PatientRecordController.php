@@ -10,6 +10,11 @@ require_once __DIR__ . '/../Pattern/PatientRecordSummary/BasicPatientRecord.php'
 require_once __DIR__ . '/../Pattern/PatientRecordSummary/ConfidentialityDecorator.php';
 require_once __DIR__ . '/../Pattern/PatientRecordSummary/AuditTrailDecorator.php';
 require_once __DIR__ . '/../Pattern/PatientRecordSummary/EmergencyAlertDecorator.php';
+require_once __DIR__ . '/../Service/PharmacyServiceClient.php';
+require_once __DIR__ . '/../Service/PharmacyServiceConfig.php';
+require_once __DIR__ . '/../Service/PatientRecordCreationService.php';
+require_once __DIR__ . '/../Service/AppointmentServiceClient.php';
+require_once __DIR__ . '/../Service/AppointmentServiceConfig.php';
 
 class PatientRecordController
 {
@@ -28,15 +33,58 @@ class PatientRecordController
 
     public function index(): void
     {
+        $page = $this->requestedPage();
+        $perPage = 10;
+        if ($this->currentRole() === 'doctor') {
+            $patientId = $this->requestedPatientId();
+            if ($patientId === '') {
+                $this->doctorPatients();
+                return;
+            }
+            if (!$this->doctorCanManagePatient($patientId)) {
+                $this->forbidden();
+                return;
+            }
+            $patient = $this->patientModel->findById($patientId);
+            $recordPage = $this->patientRecordModel->paginateByPatient($patientId, $page, $perPage, $this->currentUserId());
+            $records = $recordPage['records'];
+            $canManageRecords = true;
+            $isDoctorView = true;
+            require __DIR__ . '/../View/patient_record/index.php';
+            return;
+        }
         $patientId = $this->currentPatientId();
         $patient = $this->patientModel->findById($patientId);
         if ($patient === null) {
             $this->notFound();
             return;
         }
-        $records = $this->patientRecordModel->getAllByPatient($patientId);
+        $recordPage = $this->patientRecordModel->paginateByPatient($patientId, $page, $perPage);
+        $records = $recordPage['records'];
         $canManageRecords = $this->canManageRecords();
+        $isDoctorView = false;
         require __DIR__ . '/../View/patient_record/index.php';
+    }
+
+    public function doctorPatients(): void
+    {
+        if ($this->currentRole() !== 'doctor') {
+            $this->forbidden();
+            return;
+        }
+        $patients = $this->patientRecordModel->getPatientsForDoctor($this->currentUserId());
+        try {
+            foreach ($this->appointmentClient()->getDoctorPatientAssignments($this->currentUserId()) as $assignment) {
+                $this->patientModel->ensureExists($assignment['patient_id'], $assignment['patient_name']);
+                $patients[] = ['id' => $assignment['patient_id'], 'name' => $assignment['patient_name']];
+            }
+            $unique = [];
+            foreach ($patients as $patient) $unique[$patient['id']] = $patient;
+            $patients = array_values($unique);
+        } catch (Throwable $exception) {
+            error_log('Appointment assignment REST lookup unavailable: ' . $exception->getMessage());
+        }
+        require __DIR__ . '/../View/patient_record/doctor_patients.php';
     }
 
     public function show(string $id): void
@@ -51,7 +99,7 @@ class PatientRecordController
             $this->notFound();
             return;
         }
-        if (!$this->canManageRecords() && $record['patient_id'] !== $this->currentPatientId()) {
+        if (!$this->canAccessRecord($record)) {
             $this->forbidden();
             return;
         }
@@ -89,6 +137,15 @@ class PatientRecordController
         // Build the final decorated representation. The View presents each
         // decorator effect naturally instead of showing duplicate debug text.
         $decoratedDetails = $patientRecord->getDetails();
+        $pharmacyPrescriptions = [];
+        $pharmacyError = null;
+        foreach ($record['prescription_references'] as $reference) {
+            try {
+                $pharmacyPrescriptions[] = $this->pharmacyClient()->getPrescription($reference);
+            } catch (Throwable) {
+                $pharmacyError = 'The linked prescription could not be retrieved from Pharmacy right now.';
+            }
+        }
         $canManageRecords = $this->canManageRecords();
         require __DIR__ . '/../View/patient_record/show.php';
     }
@@ -99,12 +156,26 @@ class PatientRecordController
             $this->forbidden();
             return;
         }
-        $patient = $this->patientModel->findById($this->currentPatientId());
+        $patientId = $this->currentRole() === 'doctor' ? $this->requestedPatientId() : $this->currentPatientId();
+        if ($patientId === '' || ($this->currentRole() === 'doctor' && !$this->doctorCanManagePatient($patientId))) {
+            $this->forbidden();
+            return;
+        }
+        $patient = $this->patientModel->findById($patientId);
         if ($patient === null) {
             $this->notFound();
             return;
         }
         $conditions = $this->conditionModel->getAll();
+        try {
+            $medicines = $this->pharmacyClient()->getMedicineCatalog();
+            $pharmacyCatalogError = null;
+        } catch (Throwable) {
+            $medicines = [];
+            $pharmacyCatalogError = 'The Pharmacy medicine catalogue is unavailable. Please try again.';
+        }
+        $isDoctorCreate = $this->currentRole() === 'doctor';
+        $isDoctorUser = $isDoctorCreate;
         require __DIR__ . '/../View/patient_record/create.php';
     }
 
@@ -118,11 +189,43 @@ class PatientRecordController
             $this->methodNotAllowed();
             return;
         }
-        $data = $this->validatedInput($this->currentPatientId());
+        $patientId = $this->currentRole() === 'doctor' ? $this->requestedPatientId() : $this->currentPatientId();
+        if ($patientId === '' || ($this->currentRole() === 'doctor' && !$this->doctorCanManagePatient($patientId))) {
+            $this->forbidden();
+            return;
+        }
+        $data = $this->validatedInput($patientId);
         if ($data === null) {
             return;
         }
-        $recordId = $this->patientRecordModel->create($data);
+        $medicines = $this->validatedMedicineItems();
+        if ($medicines === null) return;
+        $patient = $this->patientModel->findById($patientId);
+        if ($patient === null) { $this->notFound(); return; }
+        $workflow = new PatientRecordCreationService(
+            $this->pharmacyClient(),
+            fn (array $recordData, string $reference): string => $this->patientRecordModel->create($recordData, $reference),
+            static function (string $reference, Throwable $exception): void {
+                error_log('RECONCILIATION_REQUIRED prescription=' . $reference . ' local_error=' . $exception->getMessage());
+            }
+        );
+        try {
+            $recordId = $workflow->create(
+                $data,
+                $patient,
+                $this->currentRole() === 'doctor' ? $this->currentUserName() : 'Doctor ' . $data['doctor_id'],
+                $medicines
+            );
+        } catch (MedicineUnavailableException $exception) {
+            $this->renderError(422, 'Medicine unavailable', $exception->getMessage());
+            return;
+        } catch (IntegrationConsistencyException $exception) {
+            $this->renderError(503, 'Patient Record save failed', 'Pharmacy accepted the prescription, but the local record failed. Reference ' . $exception->prescriptionReference . ' was logged for reconciliation.');
+            return;
+        } catch (Throwable) {
+            $this->renderError(502, 'Pharmacy unavailable', 'The Patient Record could not check stock or create the approved Pharmacy dispensing request.');
+            return;
+        }
         $this->writeAuditLog($recordId, 'CREATE');
         header('Location: index.php?action=show&id=' . urlencode($recordId));
         exit;
@@ -144,7 +247,9 @@ class PatientRecordController
             $this->notFound();
             return;
         }
+        if (!$this->canAccessRecord($record)) { $this->forbidden(); return; }
         $conditions = $this->conditionModel->getAll();
+        $isDoctorUser = $this->currentRole() === 'doctor';
         require __DIR__ . '/../View/patient_record/edit.php';
     }
 
@@ -167,6 +272,7 @@ class PatientRecordController
             $this->notFound();
             return;
         }
+        if (!$this->canAccessRecord($existingRecord)) { $this->forbidden(); return; }
         // An edit must never transfer a medical record to another patient.
         $data = $this->validatedInput($existingRecord['patient_id']);
         if ($data === null) {
@@ -182,52 +288,39 @@ class PatientRecordController
     {
         $data = [
             'patient_id' => $patientId,
-            'appointment_id' => $this->postString('appointment_id'),
-            'doctor_id' => $this->postString('doctor_id'),
+            'doctor_id' => $this->currentRole() === 'doctor' ? $this->currentUserId() : $this->postString('doctor_id'),
             'condition_id' => $this->postString('condition_id'),
             'severity' => $this->postString('severity'),
             'remark' => $this->postString('remark'),
             'record_date' => $this->postString('record_date'),
         ];
         if (in_array('', $data, true)) {
-            http_response_code(422);
-            echo 'All fields are required.';
+            $this->renderError(422, 'Invalid record', 'All fields are required.');
             return null;
         }
         if (!in_array($data['severity'], ['Mild', 'Moderate', 'Severe'], true)) {
-            http_response_code(422);
-            echo 'Invalid severity.';
-            return null;
-        }
-        if (!preg_match('/^APT[0-9]{4,17}$/', $data['appointment_id'])) {
-            http_response_code(422);
-            echo 'Invalid appointment ID.';
+            $this->renderError(422, 'Invalid record', 'Invalid severity.');
             return null;
         }
         if (!preg_match('/^DC[0-9]{3,18}$/', $data['doctor_id'])) {
-            http_response_code(422);
-            echo 'Invalid doctor ID.';
+            $this->renderError(422, 'Invalid record', 'Invalid doctor ID.');
             return null;
         }
         if (!preg_match('/^C[A-Za-z0-9_-]{1,9}$/', $data['condition_id'])) {
-            http_response_code(422);
-            echo 'Invalid condition.';
+            $this->renderError(422, 'Invalid record', 'Invalid condition.');
             return null;
         }
         if (mb_strlen($data['remark']) > 5000) {
-            http_response_code(422);
-            echo 'Remark must not exceed 5000 characters.';
+            $this->renderError(422, 'Invalid record', 'Remark must not exceed 5000 characters.');
             return null;
         }
         $date = DateTimeImmutable::createFromFormat('!Y-m-d', $data['record_date']);
         if ($date === false || $date->format('Y-m-d') !== $data['record_date']) {
-            http_response_code(422);
-            echo 'Invalid record date.';
+            $this->renderError(422, 'Invalid record', 'Invalid record date.');
             return null;
         }
         if (!$this->conditionModel->exists($data['condition_id'])) {
-            http_response_code(422);
-            echo 'Invalid condition.';
+            $this->renderError(422, 'Invalid record', 'Invalid condition.');
             return null;
         }
 
@@ -241,6 +334,88 @@ class PatientRecordController
         return is_string($value) ? trim($value) : '';
     }
 
+    /** @return list<array{sku:string,quantity:int,instructions:string}>|null */
+    private function validatedMedicineItems(): ?array
+    {
+        $skus = $_POST['medicine_sku'] ?? [];
+        $quantities = $_POST['medicine_quantity'] ?? [];
+        $instructions = $_POST['medicine_instructions'] ?? [];
+        if (!is_array($skus) || !is_array($quantities) || !is_array($instructions) || $skus === []) {
+            $this->renderError(422, 'Invalid prescription', 'Select at least one medicine.');
+            return null;
+        }
+        $items = [];
+        foreach ($skus as $index => $rawSku) {
+            $sku = is_string($rawSku) ? strtoupper(trim($rawSku)) : '';
+            $quantity = filter_var($quantities[$index] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 1000]]);
+            $instruction = is_string($instructions[$index] ?? null) ? trim($instructions[$index]) : '';
+            if (preg_match('/^[A-Z0-9][A-Z0-9_-]{2,49}$/', $sku) !== 1 || $quantity === false || mb_strlen($instruction) > 255) {
+                $this->renderError(422, 'Invalid prescription', 'Each medicine must have a valid SKU, quantity from 1 to 1000, and instructions up to 255 characters.'); return null;
+            }
+            if (isset($items[$sku])) { $this->renderError(422, 'Invalid prescription', 'The same medicine cannot be selected twice.'); return null; }
+            $items[$sku] = ['sku' => $sku, 'quantity' => $quantity, 'instructions' => $instruction ?: 'Follow doctor instructions.'];
+        }
+        return array_values($items);
+    }
+
+    /** @param list<array{sku:string,quantity:int,instructions:string}> $items */
+    private function createApprovedPharmacyRequest(array $items, array $patient, string $doctorId, string $doctorName): ?string
+    {
+        try {
+            foreach ($items as $item) {
+                $availability = $this->pharmacyClient()->getMedicineAvailability(
+                    (string) $item['sku'],
+                    (int) $item['quantity']
+                );
+                if (($availability['available'] ?? 'false') !== 'true') {
+                    $this->renderError(422, 'Medicine unavailable', 'A prescribed medicine is currently unavailable: ' . (string) $item['sku']);
+                    return null;
+                }
+            }
+            $response = $this->pharmacyClient()->createApprovedDispensingRequest(
+                (string) $patient['id'],
+                (string) $patient['name'],
+                $doctorId,
+                $doctorName,
+                $items
+            );
+            return (string) $response['prescriptionReference'];
+        } catch (Throwable) {
+            $this->renderError(502, 'Pharmacy unavailable', 'The Patient Record could not check stock or create the approved Pharmacy dispensing request.');
+            return null;
+        }
+    }
+
+    private function pharmacyClient(): PharmacyServiceClient
+    {
+        return new PharmacyServiceClient(
+            PharmacyServiceConfig::url(),
+            PharmacyServiceConfig::apiKey(),
+            5
+        );
+    }
+
+    private function appointmentClient(): AppointmentServiceClient
+    {
+        return new AppointmentServiceClient(AppointmentServiceConfig::url(), AppointmentServiceConfig::apiKey(), 5);
+    }
+
+    private function doctorCanManagePatient(string $patientId): bool
+    {
+        if ($this->patientRecordModel->doctorIsResponsibleForPatient($this->currentUserId(), $patientId)) return true;
+        try {
+            foreach ($this->appointmentClient()->getDoctorPatientAssignments($this->currentUserId()) as $assignment) {
+                if ($assignment['patient_id'] === $patientId) {
+                    $this->patientModel->ensureExists($assignment['patient_id'], $assignment['patient_name']);
+                    return true;
+                }
+            }
+        } catch (Throwable $exception) {
+            error_log('Appointment assignment authorisation unavailable: ' . $exception->getMessage());
+        }
+        return false;
+    }
+
     private function currentPatientId(): string
     {
         $patientId = $_SESSION['patient_id'] ?? $_SESSION['user_id'] ?? 'PA001';
@@ -248,6 +423,26 @@ class PatientRecordController
         return is_string($patientId) && preg_match('/^PA[0-9]{3,8}$/', $patientId)
             ? $patientId
             : 'PA001';
+    }
+
+    private function requestedPatientId(): string
+    {
+        $patientId = $_GET['patient_id'] ?? '';
+        return is_string($patientId) && preg_match('/^PA[0-9]{3,8}$/', $patientId) ? $patientId : '';
+    }
+
+    private function requestedPage(): int
+    {
+        $page = filter_input(INPUT_GET, 'page', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+
+        return is_int($page) ? $page : 1;
+    }
+
+    private function canAccessRecord(array $record): bool
+    {
+        if ($this->currentRole() === 'admin') return true;
+        if ($this->currentRole() === 'doctor') return $record['doctor_id'] === $this->currentUserId();
+        return $record['patient_id'] === $this->currentPatientId();
     }
 
     private function canManageRecords(): bool
@@ -307,19 +502,21 @@ class PatientRecordController
 
     private function notFound(): void
     {
-        http_response_code(404);
-        echo 'Patient record not found.';
+        $this->renderError(404, 'Patient record not found', 'The requested Patient Record does not exist.');
     }
 
     private function methodNotAllowed(): void
     {
-        http_response_code(405);
-        echo 'Method not allowed.';
+        $this->renderError(405, 'Method not allowed', 'This action does not support the requested HTTP method.');
     }
 
     private function forbidden(): void
     {
-        http_response_code(403);
-        echo 'You are not authorised to modify this patient record.';
+        $this->renderError(403, 'Access denied', 'You are not authorised to access or modify this Patient Record.');
+    }
+
+    private function renderError(int $status, string $title, string $message): void
+    {
+        ErrorRenderer::render($status, $title, $message);
     }
 }

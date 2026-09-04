@@ -1,20 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<pharmacyPrescriptionResponse>
-    <requestID>REQ-20260824-001</requestID>
-    <status>S</status>
-    <timeStamp>2026-08-24 10:30:01</timeStamp>
-    <message>Prescription retrieved successfully.</message>
-    <patientID>PA001</patientID>
-    <appointmentID>APT0001</appointmentID>
-    <prescriptionID>RX0001</prescriptionID>
-    <doctorID>DC001</doctorID>
-    <finalPrice>25.50</finalPrice>
-    <medicines>
-        <medicine>
-            <medicineID>MED001</medicineID>
-            <medicineName>Salbutamol Inhaler</medicineName>
-            <quantity>1</quantity>
-            <totalPrice>25.50</totalPrice>
-        </medicine>
-    </medicines>
-</pharmacyPrescriptionResponse>
+<m:getPrescriptionResponse xmlns:m="urn:medicare:patient-record">
+  <m:status>S</m:status><m:timestamp>2026-08-31 19:00:01</m:timestamp><m:message>Prescription retrieved successfully.</m:message><m:requestID>REQ-DEMO-001</m:requestID>
+  <m:prescriptionReference>RX-DEMO-001</m:prescriptionReference><m:patientExternalId>PAT-1001</m:patientExternalId><m:patientName>Patient Name</m:patientName><m:prescriberName>Doctor Name</m:prescriberName>
+  <m:items><m:item><m:sku>MED-PARA-500</m:sku><m:quantity>10</m:quantity><m:instructions>Take after food.</m:instructions></m:item></m:items>
+</m:getPrescriptionResponse>

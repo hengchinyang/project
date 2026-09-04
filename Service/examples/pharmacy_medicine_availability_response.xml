@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<m:getMedicineAvailabilityResponse xmlns:m="urn:medicare:patient-record">
+  <m:status>S</m:status><m:timestamp>2026-09-01 10:00:01</m:timestamp><m:message>Medicine availability retrieved successfully.</m:message><m:requestID>REQ-DEMO-002</m:requestID>
+  <m:sku>MED-PARA-500</m:sku><m:requestedQuantity>10</m:requestedQuantity><m:available>true</m:available><m:availableQuantity>120</m:availableQuantity>
+</m:getMedicineAvailabilityResponse>

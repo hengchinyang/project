@@ -22,7 +22,6 @@ The elements must appear in the documented order.
 | `requestID` | String | Mandatory | Unique identifier for tracing the request | 8-64 letters, numbers, `_` or `-` |
 | `timeStamp` | String | Mandatory | Time the request was created | `YYYY-MM-DD HH:MM:SS` |
 | `patientID` | String | Mandatory | Patient whose clinical summary is requested | `PA` followed by 3-8 digits, for example `PA001` |
-| `appointmentID` | String | Optional | Limits results to one appointment | `APT` followed by 4-17 digits, for example `APT0001` |
 
 ## Response fields
 
@@ -35,7 +34,7 @@ The elements must appear in the documented order.
 | `patient` | Object | Success only | Patient identity | `patientID`, `patientName` |
 | `records` | Collection | Success only | One or more clinical summaries | Repeating `record` elements |
 
-Each `record` contains `recordID`, `appointmentID`, `doctorID`, `condition`, `severity`, and `recordDate`. The sensitive free-text remark is intentionally excluded under the least-privilege principle.
+Each `record` contains `recordID`, `doctorID`, `condition`, `severity`, and `recordDate`. The sensitive free-text remark is intentionally excluded under the least-privilege principle.
 
 ## Status and HTTP scenarios
 

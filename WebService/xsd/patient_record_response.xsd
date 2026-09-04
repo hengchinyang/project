@@ -20,12 +20,6 @@
         </xs:restriction>
     </xs:simpleType>
 
-    <xs:simpleType name="AppointmentIdType">
-        <xs:restriction base="xs:string">
-            <xs:pattern value="APT[0-9]{4,17}"/>
-        </xs:restriction>
-    </xs:simpleType>
-
     <xs:simpleType name="DoctorIdType">
         <xs:restriction base="xs:string">
             <xs:pattern value="DC[0-9]{3,18}"/>
@@ -68,7 +62,6 @@
                                 <xs:complexType>
                                     <xs:sequence>
                                         <xs:element name="recordID" type="RecordIdType"/>
-                                        <xs:element name="appointmentID" type="AppointmentIdType"/>
                                         <xs:element name="doctorID" type="DoctorIdType"/>
                                         <xs:element name="condition" type="xs:string"/>
                                         <xs:element name="severity" type="SeverityType"/>

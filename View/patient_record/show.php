@@ -32,8 +32,11 @@
         .button:hover { filter: brightness(.96); }
         @media (max-width: 640px) { .page { margin: 24px auto; } .page-header { flex-direction: column; } .grid { grid-template-columns: 1fr; } }
     </style>
+    <link rel="icon" href="assets/favicon.ico">
+    <link rel="stylesheet" href="assets/css/pharmacy.css">
 </head>
 <body>
+<main class="container">
 <main class="page">
     <header class="page-header">
         <div>
@@ -58,12 +61,34 @@
             </div>
         </section>
 
+        <?php if ($record['prescription_references'] !== []): ?>
+            <section class="section">
+                <h2>Pharmacy prescription</h2>
+                <?php if ($pharmacyError !== null): ?>
+                    <p class="alert"><?= htmlspecialchars($pharmacyError) ?></p>
+                <?php endif; ?>
+                <?php foreach ($pharmacyPrescriptions as $prescription): ?>
+                    <p><strong><?= htmlspecialchars($prescription['prescriptionReference']) ?></strong> · Prescriber: <?= htmlspecialchars($prescription['prescriberName']) ?></p>
+                    <div class="table-wrap">
+                        <table style="width:100%;border-collapse:collapse">
+                            <thead><tr><th style="text-align:left;padding:8px">Medicine SKU</th><th style="text-align:left;padding:8px">Quantity</th><th style="text-align:left;padding:8px">Instructions</th></tr></thead>
+                            <tbody>
+                            <?php foreach ($prescription['items'] as $item): ?>
+                                <tr><td style="padding:8px"><?= htmlspecialchars($item['sku']) ?></td><td style="padding:8px"><?= htmlspecialchars((string) $item['quantity']) ?></td><td style="padding:8px"><?= htmlspecialchars($item['instructions']) ?></td></tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endforeach; ?>
+            </section>
+        <?php endif; ?>
+
         <section class="section">
             <h2>Clinical information</h2>
             <div class="grid">
                 <div><span class="field-label">Condition</span><span class="field-value"><?= htmlspecialchars($record['condition_name']) ?></span></div>
                 <div><span class="field-label">Doctor ID</span><span class="field-value"><?= htmlspecialchars($record['doctor_id']) ?></span></div>
-                <div><span class="field-label">Appointment ID</span><span class="field-value"><?= htmlspecialchars($record['appointment_id']) ?></span></div>
+                <div><span class="field-label">Prescription reference</span><span class="field-value"><?= htmlspecialchars(implode(', ', $record['prescription_references']) ?: 'Not linked') ?></span></div>
             </div>
             <div style="margin-top: 22px;">
                 <span class="field-label">Remark</span>
@@ -83,6 +108,7 @@
         <?php endif; ?>
         <a class="button" href="index.php?action=index">Back to history</a>
     </nav>
+</main>
 </main>
 </body>
 </html>
